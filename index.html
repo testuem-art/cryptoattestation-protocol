@@ -6,15 +6,87 @@
     <title>CryptoAttestation dApp</title>
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
-        button { padding: 12px 18px; margin: 8px 5px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        input { padding: 10px; margin: 8px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        .section { margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa; }
-        #console { background: #2c3e50; color: #ecf0f1; padding: 1.2rem; margin-top: 1.5rem; border-radius: 8px; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 2rem auto; 
+            padding: 1rem; 
+            line-height: 1.6; 
+            background-color: #f5f5f5;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        button { 
+            padding: 12px 18px; 
+            margin: 8px 5px; 
+            cursor: pointer; 
+            background-color: #4CAF50; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3e8e41;
+        }
+        button:disabled { 
+            background-color: #cccccc; 
+            cursor: not-allowed; 
+        }
+        input { 
+            padding: 10px; 
+            margin: 8px 0; 
+            width: 100%; 
+            box-sizing: border-box; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+        }
+        .section { 
+            margin-bottom: 2rem; 
+            padding: 1.5rem; 
+            border: 1px solid #e0e0e0; 
+            border-radius: 8px; 
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #console { 
+            background: #2c3e50; 
+            color: #ecf0f1; 
+            padding: 1.2rem; 
+            margin-top: 1.5rem; 
+            border-radius: 8px; 
+            font-family: monospace; 
+            white-space: pre-wrap; 
+            max-height: 300px; 
+            overflow-y: auto; 
+        }
         .status-ok { color: #2ecc71; }
         .status-error { color: #e74c3c; }
         .status-wait { color: #f39c12; }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .attestation-card {
+            margin: 15px 0;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #f9f9f9;
+        }
     </style>
 </head>
 <body>
@@ -24,6 +96,7 @@
     <div class="section">
         <h2>1. Подключение кошелька</h2>
         <button id="connectWallet">🔗 Подключить MetaMask</button>
+        <span id="loader" class="loader" style="display: none;"></span>
         <p>Статус: <span id="walletStatus" class="status-wait">Не подключен</span></p>
         <p>Сеть: <span id="networkStatus">Неизвестно</span></p>
     </div>
@@ -52,7 +125,7 @@
         const contractAddress = "0xDA0bab807633f07f013f94DD0E6A4F96F8742B53";
         const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
-        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
         let provider = null;
         let signer = null;
         let contract = null;
@@ -67,6 +140,7 @@
         const countButton = document.getElementById('getAttestationCount');
         const getAllButton = document.getElementById('getAllAttestations');
         const consoleOutput = document.getElementById('console');
+        const loader = document.getElementById('loader');
 
         // ФУНКЦИЯ ЛОГИРОВАНИЯ
         function logToConsole(message) {
@@ -77,18 +151,34 @@
 
         // ФУНКЦИЯ ПРЕОБРАЗОВАНИЯ СТРОКИ В ХЭШ
         function stringToBytes32(inputString) {
+            if (typeof ethers === 'undefined') {
+                logToConsole('❌ КРИТИЧЕСКАЯ ОШИБКА: Библиотека ethers не загрузилась!');
+                throw new Error('Ethers library not loaded');
+            }
             return ethers.utils.id(inputString);
         }
 
-        // ФУНКЦИЯ ПРОВЕРКИ ПОДКЛЮЧЕНИЯ METAMASK
+        // ФУНКЦИЯ ПРОВЕРКИ METAMASK (ДЛЯ МОБИЛЬНЫХ И ПК)
         function checkMetaMask() {
-            if (typeof window.ethereum === 'undefined') {
-                logToConsole("❌ ОШИБКА: MetaMask не обнаружен. Установите расширение.");
-                statusSpan.textContent = "MetaMask не установлен";
+            // Проверяем, является ли браузер встроенным браузером MetaMask
+            const isInMobileApp = /MetaMaskMobile/.test(navigator.userAgent);
+            
+            if (typeof window.ethereum === 'undefined' && !isInMobileApp) {
+                logToConsole("❌ MetaMask не обнаружен.");
+                logToConsole("ℹ️ Для ПК: установите расширение MetaMask.");
+                logToConsole("ℹ️ Для мобильных: откройте приложение MetaMask и используйте его встроенный браузер.");
+                statusSpan.textContent = "Требуется MetaMask";
                 statusSpan.className = 'status-error';
                 connectButton.disabled = true;
                 return false;
             }
+            
+            if (isInMobileApp) {
+                logToConsole("✓ Обнаружен встроенный браузер MetaMask");
+            } else {
+                logToConsole("✓ Обнаружено расширение MetaMask");
+            }
+            
             return true;
         }
 
@@ -99,13 +189,35 @@
             getAllButton.disabled = !isConnected;
         }
 
-        // ОСНОВНАЯ ФУНКЦИЯ ПОДКЛЮЧЕНИЯ И НАСТРОЙКИ
+        // ОБРАБОТЧИК ИЗМЕНЕНИЯ СЕТИ
+        async function handleChainChanged(chainId) {
+            logToConsole("Обнаружено изменение сети...");
+            currentChainId = chainId;
+            networkSpan.textContent = `ID сети: ${chainId}`;
+            await setupContract();
+        }
+
+        // ОБРАБОТЧИК ИЗМЕНЕНИЯ АККАУНТА
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                logToConsole("⚠️ Аккаунт отключен. Подключите кошелек снова.");
+                statusSpan.textContent = "Не подключен";
+                statusSpan.className = 'status-wait';
+                updateButtonStates(false);
+            } else if (accounts[0] !== userAddress) {
+                logToConsole("⚠️ Аккаунт изменен. Обновите страницу.");
+                window.location.reload();
+            }
+        }
+
+        // ФУНКЦИЯ ПОДКЛЮЧЕНИЯ
         async function connectAndSetup() {
             if (!checkMetaMask()) return;
 
             try {
                 logToConsole("Запрос подключения аккаунтов...");
                 connectButton.disabled = true;
+                loader.style.display = 'inline-block';
                 
                 // Запрос доступа к аккаунтам
                 const accounts = await window.ethereum.request({ 
@@ -123,22 +235,42 @@
                 // Получение информации о сети
                 const network = await provider.getNetwork();
                 currentChainId = network.chainId.toString();
-                networkSpan.textContent = `ID сети: ${currentChainId}`;
+                networkSpan.textContent = `Сеть: ${network.name} (ID: ${network.chainId})`;
                 
                 // Настройка контракта
-                contract = new ethers.Contract(contractAddress, contractABI, signer);
-                logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
+                await setupContract();
                 
                 // Включение кнопок взаимодействия
                 updateButtonStates(true);
                 
                 logToConsole("✅ Успешное подключение! Контракт инициализирован.");
                 
+                // Добавляем обработчики событий
+                window.ethereum.on('chainChanged', handleChainChanged);
+                window.ethereum.on('accountsChanged', handleAccountsChanged);
+                
             } catch (error) {
                 logToConsole(`❌ Ошибка подключения: ${error.message}`);
+                if (error.code === 4001) {
+                    logToConsole("Пользователь отклонил запрос подключения");
+                }
                 statusSpan.textContent = "Ошибка подключения";
                 statusSpan.className = 'status-error';
                 connectButton.disabled = false;
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+
+        // ФУНКЦИЯ НАСТРОЙКИ КОНТРАКТА
+        async function setupContract() {
+            try {
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
+                return true;
+            } catch (error) {
+                logToConsole(`❌ Ошибка инициализации контракта: ${error.message}`);
+                return false;
             }
         }
 
@@ -157,8 +289,14 @@
                 return;
             }
 
+            // Проверка на одинаковые значения (предупреждение)
+            if (assetInput === dataInput) {
+                logToConsole("⚠️ Внимание: Идентификатор и данные одинаковые. Это нормально?");
+            }
+
             try {
                 createButton.disabled = true;
+                loader.style.display = 'inline-block';
                 logToConsole("Создание хэшей из введенных данных...");
                 
                 const assetHash = stringToBytes32(assetInput);
@@ -168,12 +306,19 @@
                 logToConsole(`Data Hash: ${dataHash}`);
                 
                 logToConsole("Отправка транзакции...");
-                const transaction = await contract.addAttestation(assetHash, dataHash);
                 
+                const transaction = await contract.addAttestation(assetHash, dataHash);
                 logToConsole(`⏳ Транзакция отправлена: ${transaction.hash}`);
                 logToConsole("Ожидание подтверждения... (это может занять 15-30 секунд)");
                 
-                const receipt = await transaction.wait();
+                // Ждем подтверждения с таймаутом
+                const receipt = await Promise.race([
+                    transaction.wait(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Таймаут транзакции')), 120000) // 2 минуты для мобильных
+                    )
+                ]);
+                
                 logToConsole(`✅ Транзакция подтверждена в блоке ${receipt.blockNumber}!`);
                 logToConsole("Аттестация успешно записана в блокчейн!");
                 
@@ -183,11 +328,21 @@
                 
             } catch (error) {
                 logToConsole(`❌ Ошибка при создании аттестации: ${error.message}`);
-                if (error.data) {
-                    logToConsole(`Детали ошибки: ${JSON.stringify(error.data)}`);
+                
+                // Более детальный анализ ошибки
+                if (error.code === 'ACTION_REJECTED') {
+                    logToConsole("Пользователь отклонил транзакцию в MetaMask");
+                } else if (error.message.includes('Таймаут')) {
+                    logToConsole("Транзакция зависла. Проверьте MetaMask.");
+                } else if (error.code === 'INSUFFICIENT_FUNDS') {
+                    logToConsole("Недостаточно ETH для газа. Получите тестовые ETH.");
+                } else if (error.data && error.data.message) {
+                    logToConsole(`Ошибка контракта: ${error.data.message}`);
                 }
+                
             } finally {
                 createButton.disabled = false;
+                loader.style.display = 'none';
             }
         }
 
@@ -202,11 +357,12 @@
 
             try {
                 countButton.disabled = true;
+                loader.style.display = 'inline-block';
                 const assetHash = stringToBytes32(assetInput);
                 
                 logToConsole(`Запрос количества аттестаций для хэша: ${assetHash}`);
                 
-                // Важное изменение: используем provider вместо signer для вызовов view-функций
+                // Используем provider вместо signer для вызовов view-функций
                 const contractWithProvider = new ethers.Contract(contractAddress, contractABI, provider);
                 const count = await contractWithProvider.getAttestationCount(assetHash);
                 
@@ -223,9 +379,9 @@
                         logToConsole(`Не удалось декодировать ошибку: ${e.message}`);
                     }
                 }
-                console.error("Полная ошибка:", error);
             } finally {
                 countButton.disabled = false;
+                loader.style.display = 'none';
             }
         }
 
@@ -240,12 +396,13 @@
 
             try {
                 getAllButton.disabled = true;
+                loader.style.display = 'inline-block';
                 const assetHash = stringToBytes32(assetInput);
                 const resultsDiv = document.getElementById('attestationResults');
                 
                 logToConsole("Запрос количества аттестаций...");
                 
-                // Важное изменение: используем provider вместо signer для вызовов view-функций
+                // Используем provider вместо signer для вызовов view-функций
                 const contractWithProvider = new ethers.Contract(contractAddress, contractABI, provider);
                 const count = await contractWithProvider.getAttestationCount(assetHash);
                 const numCount = count.toNumber();
@@ -263,7 +420,7 @@
                     const attestation = await contractWithProvider.assetAttestations(assetHash, i);
                     
                     resultsDiv.innerHTML += `
-                        <div style="margin: 15px 0; padding: 12px; border: 1px solid #ddd; border-radius: 6px;">
+                        <div class="attestation-card">
                             <p><strong>Запись #${i+1}:</strong></p>
                             <p>Проверил: ${attestation.verifier}</p>
                             <p>Хэш данных: ${attestation.dataHash}</p>
@@ -285,9 +442,9 @@
                         logToConsole(`Не удалось декодировать ошибку: ${e.message}`);
                     }
                 }
-                console.error("Полная ошибка:", error);
             } finally {
                 getAllButton.disabled = false;
+                loader.style.display = 'none';
             }
         }
 
