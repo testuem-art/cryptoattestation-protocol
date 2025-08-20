@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoAttestation dApp</title>
-    <!-- ПОДКЛЮЧАЕМ БИБЛИОТЕКУ ETHERS.js через CDN -->
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js" type="application/javascript"></script>
+    <!-- ПОДКЛЮЧАЕМ БИБЛИОТЕКУ ETHERS.js через РАЗНЫЕ CDN ДЛЯ НАДЕЖНОСТИ -->
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
         button { padding: 12px 18px; margin: 8px 5px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold; }
@@ -16,6 +16,8 @@
         .status-ok { color: #2ecc71; }
         .status-error { color: #e74c3c; }
         .status-wait { color: #f39c12; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 2s linear infinite; display: inline-block; margin-left: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -25,6 +27,7 @@
     <div class="section">
         <h2>1. Подключение кошелька</h2>
         <button id="connectWallet">🔗 Подключить MetaMask</button>
+        <span id="loader" class="loader" style="display: none;"></span>
         <p>Статус: <span id="walletStatus" class="status-wait">Не подключен</span></p>
         <p>Сеть: <span id="networkStatus">Неизвестно</span></p>
     </div>
@@ -51,7 +54,7 @@
     <script>
         // КОНФИГУРАЦИЯ (ВАШИ ДАННЫЕ)
         const contractAddress = "0xDA0bab807633f07f013f94DD0E6A4F96F8742B53";
-        const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":""bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+        const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
         // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ
         let provider = null;
@@ -68,6 +71,7 @@
         const countButton = document.getElementById('getAttestationCount');
         const getAllButton = document.getElementById('getAllAttestations');
         const consoleOutput = document.getElementById('console');
+        const loader = document.getElementById('loader');
 
         // ФУНКЦИЯ ЛОГИРОВАНИЯ
         function logToConsole(message) {
@@ -120,6 +124,7 @@
             try {
                 logToConsole("Запрос подключения аккаунтов...");
                 connectButton.disabled = true;
+                loader.style.display = 'inline-block';
                 
                 // Запрос доступа к аккаунтам
                 const accounts = await window.ethereum.request({ 
@@ -157,6 +162,8 @@
                 statusSpan.textContent = "Ошибка подключения";
                 statusSpan.className = 'status-error';
                 connectButton.disabled = false;
+            } finally {
+                loader.style.display = 'none';
             }
         }
 
@@ -177,7 +184,7 @@
             }
         }
 
-        // ФУНКЦИЯ СОЗДАНИЯ АТТЕСТАЦИИ
+        // ФУНКЦИЯ СОЗДАНИА АТТЕСТАЦИИ
         async function createAttestation() {
             if (!contract) {
                 logToConsole("⚠️ Контракт не инициализирован");
