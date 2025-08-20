@@ -205,14 +205,23 @@
                 const assetHash = stringToBytes32(assetInput);
                 
                 logToConsole(`Запрос количества аттестаций для хэша: ${assetHash}`);
-                const count = await contract.getAttestationCount(assetHash);
+                
+                // Важное изменение: используем provider вместо signer для вызовов view-функций
+                const contractWithProvider = new ethers.Contract(contractAddress, contractABI, provider);
+                const count = await contractWithProvider.getAttestationCount(assetHash);
                 
                 logToConsole(`✅ Найдено аттестаций: ${count.toString()}`);
                 
             } catch (error) {
                 logToConsole(`❌ Ошибка при запросе количества: ${error.message}`);
-                if (error.error) {
-                    logToConsole(`Детали ошибки: ${JSON.stringify(error.error)}`);
+                if (error.error && error.error.data) {
+                    try {
+                        // Пытаемся декодировать ошибку
+                        const decodedError = contract.interface.parseError(error.error.data);
+                        logToConsole(`Декодированная ошибка: ${decodedError.name}`);
+                    } catch (e) {
+                        logToConsole(`Не удалось декодировать ошибку: ${e.message}`);
+                    }
                 }
                 console.error("Полная ошибка:", error);
             } finally {
@@ -235,7 +244,10 @@
                 const resultsDiv = document.getElementById('attestationResults');
                 
                 logToConsole("Запрос количества аттестаций...");
-                const count = await contract.getAttestationCount(assetHash);
+                
+                // Важное изменение: используем provider вместо signer для вызовов view-функций
+                const contractWithProvider = new ethers.Contract(contractAddress, contractABI, provider);
+                const count = await contractWithProvider.getAttestationCount(assetHash);
                 const numCount = count.toNumber();
                 
                 if (numCount === 0) {
@@ -248,7 +260,7 @@
                 logToConsole(`Найдено ${numCount} аттестаций. Загрузка...`);
                 
                 for (let i = 0; i < numCount; i++) {
-                    const attestation = await contract.assetAttestations(assetHash, i);
+                    const attestation = await contractWithProvider.assetAttestations(assetHash, i);
                     
                     resultsDiv.innerHTML += `
                         <div style="margin: 15px 0; padding: 12px; border: 1px solid #ddd; border-radius: 6px;">
@@ -264,8 +276,14 @@
                 
             } catch (error) {
                 logToConsole(`❌ Ошибка при загрузке аттестаций: ${error.message}`);
-                if (error.error) {
-                    logToConsole(`Детали ошибки: ${JSON.stringify(error.error)}`);
+                if (error.error && error.error.data) {
+                    try {
+                        // Пытаемся декодировать ошибку
+                        const decodedError = contract.interface.parseError(error.error.data);
+                        logToConsole(`Декодированная ошибка: ${decodedError.name}`);
+                    } catch (e) {
+                        logToConsole(`Не удалось декодировать ошибку: ${e.message}`);
+                    }
                 }
                 console.error("Полная ошибка:", error);
             } finally {
