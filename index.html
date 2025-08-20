@@ -81,16 +81,36 @@
         }
 
         // ФУНКЦИЯ ПРОВЕРКИ ПОДКЛЮЧЕНИЯ METAMASK
-        function checkMetaMask() {
-            if (typeof window.ethereum === 'undefined') {
-                logToConsole("❌ ОШИБКА: MetaMask не обнаружен. Установите расширение.");
-                statusSpan.textContent = "MetaMask не установлен";
-                statusSpan.className = 'status-error';
-                connectButton.disabled = true;
-                return false;
-            }
-            return true;
+        // УЛУЧШЕННАЯ ФУНКЦИЯ ПРОВЕРКИ METAMASK
+function checkMetaMask() {
+    // Проверяем, есть ли объект Ethereum вообще
+    if (typeof window.ethereum === 'undefined') {
+        // Проверяем, это мобильное устройство?
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            logToConsole("❌ Обнаружено мобильное устройство.");
+            logToConsole("ℹ️  Для работы на телефоне:");
+            logToConsole("1. Откройте приложение MetaMask");
+            logToConsole("2. Нажмите на вкладку 'Браузер'");
+            logToConsole("3. Введите адрес этого сайта в строку поиска");
+            statusSpan.textContent = "Используйте браузер в приложении MetaMask";
+        } else {
+            logToConsole("❌ ОШИБКА: MetaMask не обнаружен.");
+            logToConsole("ℹ️  Установите расширение для Chrome, Firefox или Brave.");
+            statusSpan.textContent = "MetaMask не установлен";
         }
+        statusSpan.className = 'status-error';
+        connectButton.disabled = true;
+        return false;
+    }
+    
+    // Если MetaMask найден, но не подключен
+    logToConsole("MetaMask обнаружен. Нажмите 'Подключить'.");
+    statusSpan.textContent = "Обнаружен. Готов к подключению";
+    statusSpan.className = 'status-wait';
+    return true;
+}
 
         // ФУНКЦИЯ ОБНОВЛЕНИЯ СТАТУСА КНОПОК
         function updateButtonStates(isConnected) {
