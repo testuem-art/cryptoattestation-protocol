@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoAttestation dApp</title>
+    <!-- ПОДКЛЮЧАЕМ БИБЛИОТЕКУ ETHERS.js через CDN -->
     <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js" type="application/javascript"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
@@ -50,7 +51,7 @@
     <script>
         // КОНФИГУРАЦИЯ (ВАШИ ДАННЫЕ)
         const contractAddress = "0xDA0bab807633f07f013f94DD0E6A4F96F8742B53";
-        const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+        const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":""bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
         // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ
         let provider = null;
@@ -77,40 +78,25 @@
 
         // ФУНКЦИЯ ПРЕОБРАЗОВАНИЯ СТРОКИ В ХЭШ
         function stringToBytes32(inputString) {
+            // ПРОВЕРКА: Загружена ли библиотека ethers?
+            if (typeof ethers === 'undefined') {
+                logToConsole('❌ КРИТИЧЕСКАЯ ОШИБКА: Библиотека ethers не загрузилась!');
+                throw new Error('Ethers library not loaded');
+            }
             return ethers.utils.id(inputString);
         }
 
         // ФУНКЦИЯ ПРОВЕРКИ ПОДКЛЮЧЕНИЯ METAMASK
-        // УЛУЧШЕННАЯ ФУНКЦИЯ ПРОВЕРКИ METAMASK
-function checkMetaMask() {
-    // Проверяем, есть ли объект Ethereum вообще
-    if (typeof window.ethereum === 'undefined') {
-        // Проверяем, это мобильное устройство?
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        if (isMobile) {
-            logToConsole("❌ Обнаружено мобильное устройство.");
-            logToConsole("ℹ️  Для работы на телефоне:");
-            logToConsole("1. Откройте приложение MetaMask");
-            logToConsole("2. Нажмите на вкладку 'Браузер'");
-            logToConsole("3. Введите адрес этого сайта в строку поиска");
-            statusSpan.textContent = "Используйте браузер в приложении MetaMask";
-        } else {
-            logToConsole("❌ ОШИБКА: MetaMask не обнаружен.");
-            logToConsole("ℹ️  Установите расширение для Chrome, Firefox или Brave.");
-            statusSpan.textContent = "MetaMask не установлен";
+        function checkMetaMask() {
+            if (typeof window.ethereum === 'undefined') {
+                logToConsole("❌ ОШИБКА: MetaMask не обнаружен. Установите расширение.");
+                statusSpan.textContent = "MetaMask не установлен";
+                statusSpan.className = 'status-error';
+                connectButton.disabled = true;
+                return false;
+            }
+            return true;
         }
-        statusSpan.className = 'status-error';
-        connectButton.disabled = true;
-        return false;
-    }
-    
-    // Если MetaMask найден, но не подключен
-    logToConsole("MetaMask обнаружен. Нажмите 'Подключить'.");
-    statusSpan.textContent = "Обнаружен. Готов к подключению";
-    statusSpan.className = 'status-wait';
-    return true;
-}
 
         // ФУНКЦИЯ ОБНОВЛЕНИЯ СТАТУСА КНОПОК
         function updateButtonStates(isConnected) {
@@ -144,6 +130,11 @@ function checkMetaMask() {
                 statusSpan.textContent = `Подключен: ${userAddress.substring(0, 8)}...`;
                 statusSpan.className = 'status-ok';
                 
+                // ПРОВЕРКА: Загружена ли библиотека ethers?
+                if (typeof ethers === 'undefined') {
+                    throw new Error('Библиотека ethers не загрузилась. Обновите страницу.');
+                }
+                
                 // Настройка провайдера и подписанта
                 provider = new ethers.providers.Web3Provider(window.ethereum);
                 signer = provider.getSigner();
@@ -172,6 +163,11 @@ function checkMetaMask() {
         // ФУНКЦИЯ НАСТРОЙКИ КОНТРАКТА
         async function setupContract() {
             try {
+                // ПРОВЕРКА: Загружена ли библиотека ethers?
+                if (typeof ethers === 'undefined') {
+                    throw new Error('Библиотека ethers не загрузилась. Обновите страницу.');
+                }
+                
                 contract = new ethers.Contract(contractAddress, contractABI, signer);
                 logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
                 return true;
