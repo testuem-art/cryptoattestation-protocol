@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoAttestation dApp</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js" type="application/javascript"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
+        button { padding: 12px 18px; margin: 8px 5px; cursor: pointer; background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-weight: bold; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        input { padding: 10px; margin: 8px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .section { margin-bottom: 2rem; padding: 1.5rem; border: 1px solid #e0e0e0; border-radius: 8px; background: #fafafa; }
+        #console { background: #2c3e50; color: #ecf0f1; padding: 1.2rem; margin-top: 1.5rem; border-radius: 8px; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+        .status-ok { color: #2ecc71; }
+        .status-error { color: #e74c3c; }
+        .status-wait { color: #f39c12; }
+    </style>
+</head>
+<body>
+    <h1>🚀 dApp для управления аттестациями</h1>
+    <p>Это приложение работает в тестовой сети Ethereum. Убедитесь, что MetaMask подключен к той же сети, куда был развернут контракт.</p>
+
+    <div class="section">
+        <h2>1. Подключение кошелька</h2>
+        <button id="connectWallet">🔗 Подключить MetaMask</button>
+        <p>Статус: <span id="walletStatus" class="status-wait">Не подключен</span></p>
+        <p>Сеть: <span id="networkStatus">Неизвестно</span></p>
+    </div>
+
+    <div class="section">
+        <h2>2. Создание новой аттестации</h2>
+        <p><strong>Внимание:</strong> Эта операция требует газа и отправляет транзакцию в блокчейн.</p>
+        <input type="text" id="assetInput" placeholder="Введите идентификатор актива (например, Serial-Number-123)">
+        <input type="text" id="dataInput" placeholder="Введите данные аттестации (например, Passed-QA-2024)">
+        <button id="createAttestation" disabled>✅ Создать аттестацию</button>
+    </div>
+
+    <div class="section">
+        <h2>3. Проверка аттестаций</h2>
+        <p>Эти операции только читают данные из блокчейна и не требуют затрат газа.</p>
+        <input type="text" id="assetQueryInput" placeholder="Введите идентификатор актива для проверки">
+        <button id="getAttestationCount" disabled>🔍 Узнать количество</button>
+        <button id="getAllAttestations" disabled>📋 Показать все записи</button>
+        <div id="attestationResults"></div>
+    </div>
+
+    <div id="console"><b>Журнал событий:</b>\nДобро пожаловать! Для начала работы подключите MetaMask.\n</div>
+
+    <script>
+        // КОНФИГУРАЦИЯ (ВАШИ ДАННЫЕ)
+        const contractAddress = "0xDA0bab807633f07f013f94DD0E6A4F96F8742B53";
+        const contractABI = [{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"addAttestation","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"assetHash","type":"bytes32"},{"indexed":true,"internalType":"address","name":"verifier","type":"address"},{"indexed":false,"internalType":"bytes32","name":"dataHash","type":"bytes32"}],"name":"AttestationAdded","type":"event"},{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"assetAttestations","outputs":[{"internalType":"address","name":"verifier","type":"address"},{"internalType":"bytes32","name":"dataHash","type":"bytes32"},{"internalType":"uint256","name":"timestamp","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"bytes32","name":"assetHash","type":"bytes32"}],"name":"getAttestationCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ УПРАВЛЕНИЯ СОСТОЯНИЕМ
+        let provider = null;
+        let signer = null;
+        let contract = null;
+        let userAddress = null;
+        let currentChainId = null;
+
+        // ЭЛЕМЕНТЫ ИНТЕРФЕЙСА
+        const connectButton = document.getElementById('connectWallet');
+        const statusSpan = document.getElementById('walletStatus');
+        const networkSpan = document.getElementById('networkStatus');
+        const createButton = document.getElementById('createAttestation');
+        const countButton = document.getElementById('getAttestationCount');
+        const getAllButton = document.getElementById('getAllAttestations');
+        const consoleOutput = document.getElementById('console');
+
+        // ФУНКЦИЯ ЛОГИРОВАНИЯ
+        function logToConsole(message) {
+            const timestamp = new Date().toLocaleTimeString('ru-RU');
+            consoleOutput.innerHTML += `[${timestamp}] ${message}\n`;
+            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        }
+
+        // ФУНКЦИЯ ПРЕОБРАЗОВАНИЯ СТРОКИ В ХЭШ
+        function stringToBytes32(inputString) {
+            return ethers.utils.id(inputString);
+        }
+
+        // ФУНКЦИЯ ПРОВЕРКИ ПОДКЛЮЧЕНИЯ METAMASK
+        function checkMetaMask() {
+            if (typeof window.ethereum === 'undefined') {
+                logToConsole("❌ ОШИБКА: MetaMask не обнаружен. Установите расширение.");
+                statusSpan.textContent = "MetaMask не установлен";
+                statusSpan.className = 'status-error';
+                connectButton.disabled = true;
+                return false;
+            }
+            return true;
+        }
+
+        // ФУНКЦИЯ ОБНОВЛЕНИЯ СТАТУСА КНОПОК
+        function updateButtonStates(isConnected) {
+            createButton.disabled = !isConnected;
+            countButton.disabled = !isConnected;
+            getAllButton.disabled = !isConnected;
+        }
+
+        // ОБРАБОТЧИК ИЗМЕНЕНИЯ СЕТИ В METAMASK
+        async function handleChainChanged(chainId) {
+            logToConsole("Обнаружено изменение сети в MetaMask...");
+            currentChainId = chainId;
+            networkSpan.textContent = `ID сети: ${chainId}`;
+            await setupContract();
+        }
+
+        // ОСНОВНАЯ ФУНКЦИЯ ПОДКЛЮЧЕНИЯ И НАСТРОЙКИ
+        async function connectAndSetup() {
+            if (!checkMetaMask()) return;
+
+            try {
+                logToConsole("Запрос подключения аккаунтов...");
+                connectButton.disabled = true;
+                
+                // Запрос доступа к аккаунтам
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                
+                userAddress = accounts[0];
+                statusSpan.textContent = `Подключен: ${userAddress.substring(0, 8)}...`;
+                statusSpan.className = 'status-ok';
+                
+                // Настройка провайдера и подписанта
+                provider = new ethers.providers.Web3Provider(window.ethereum);
+                signer = provider.getSigner();
+                
+                // Получение информации о сети
+                const network = await provider.getNetwork();
+                currentChainId = network.chainId.toString();
+                networkSpan.textContent = `ID сети: ${currentChainId}`;
+                
+                // Настройка контракта
+                await setupContract();
+                
+                // Включение кнопок взаимодействия
+                updateButtonStates(true);
+                
+                logToConsole("✅ Успешное подключение! Контракт инициализирован.");
+                
+            } catch (error) {
+                logToConsole(`❌ Ошибка подключения: ${error.message}`);
+                statusSpan.textContent = "Ошибка подключения";
+                statusSpan.className = 'status-error';
+                connectButton.disabled = false;
+            }
+        }
+
+        // ФУНКЦИЯ НАСТРОЙКИ КОНТРАКТА
+        async function setupContract() {
+            try {
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
+                return true;
+            } catch (error) {
+                logToConsole(`❌ Ошибка инициализации контракта: ${error.message}`);
+                return false;
+            }
+        }
+
+        // ФУНКЦИЯ СОЗДАНИЯ АТТЕСТАЦИИ
+        async function createAttestation() {
+            if (!contract) {
+                logToConsole("⚠️ Контракт не инициализирован");
+                return;
+            }
+
+            const assetInput = document.getElementById('assetInput').value.trim();
+            const dataInput = document.getElementById('dataInput').value.trim();
+
+            if (!assetInput || !dataInput) {
+                logToConsole("⚠️ Заполните оба поля для создания аттестации");
+                return;
+            }
+
+            try {
+                createButton.disabled = true;
+                logToConsole("Создание хэшей из введенных данных...");
+                
+                const assetHash = stringToBytes32(assetInput);
+                const dataHash = stringToBytes32(dataInput);
+                
+                logToConsole("Отправка транзакции...");
+                const transaction = await contract.addAttestation(assetHash, dataHash);
+                
+                logToConsole(`⏳ Транзакция отправлена: ${transaction.hash}`);
+                logToConsole("Ожидание подтверждения... (это может занять 15-30 секунд)");
+                
+                const receipt = await transaction.wait();
+                logToConsole(`✅ Транзакция подтверждена в блоке ${receipt.blockNumber}!`);
+                logToConsole("Аттестация успешно записана в блокчейн!");
+                
+            } catch (error) {
+                logToConsole(`❌ Ошибка при создании аттестации: ${error.message}`);
+            } finally {
+                createButton.disabled = false;
+            }
+        }
+
+        // ФУНКЦИЯ ПОЛУЧЕНИЯ КОЛИЧЕСТВА АТТЕСТАЦИЙ
+        async function getAttestationCount() {
+            const assetInput = document.getElementById('assetQueryInput').value.trim();
+            
+            if (!assetInput) {
+                logToConsole("⚠️ Введите идентификатор актива");
+                return;
+            }
+
+            try {
+                countButton.disabled = true;
+                const assetHash = stringToBytes32(assetInput);
+                
+                logToConsole("Запрос количества аттестаций...");
+                const count = await contract.getAttestationCount(assetHash);
+                
+                logToConsole(`✅ Найдено аттестаций: ${count.toString()}`);
+                
+            } catch (error) {
+                logToConsole(`❌ Ошибка при запросе количества: ${error.message}`);
+            } finally {
+                countButton.disabled = false;
+            }
+        }
+
+        // ФУНКЦИЯ ПОЛУЧЕНИЯ ВСЕХ АТТЕСТАЦИЙ
+        async function getAllAttestations() {
+            const assetInput = document.getElementById('assetQueryInput').value.trim();
+            
+            if (!assetInput) {
+                logToConsole("⚠️ Введите идентификатор актива");
+                return;
+            }
+
+            try {
+                getAllButton.disabled = true;
+                const assetHash = stringToBytes32(assetInput);
+                const resultsDiv = document.getElementById('attestationResults');
+                
+                logToConsole("Запрос количества аттестаций...");
+                const count = await contract.getAttestationCount(assetHash);
+                const numCount = count.toNumber();
+                
+                if (numCount === 0) {
+                    resultsDiv.innerHTML = "<p>Аттестаций не найдено</p>";
+                    logToConsole("Аттестаций не найдено");
+                    return;
+                }
+                
+                resultsDiv.innerHTML = `<h3>Результаты для актива "${assetInput}":</h3>`;
+                logToConsole(`Найдено ${numCount} аттестаций. Загрузка...`);
+                
+                for (let i = 0; i < numCount; i++) {
+                    const attestation = await contract.assetAttestations(assetHash, i);
+                    
+                    resultsDiv.innerHTML += `
+                        <div style="margin: 15px 0; padding: 12px; border: 1px solid #ddd; border-radius: 6px;">
+                            <p><strong>Запись #${i+1}:</strong></p>
+                            <p>Проверил: ${attestation.verifier}</p>
+                            <p>Хэш данных: ${attestation.dataHash}</p>
+                            <p>Время: ${new Date(attestation.timestamp * 1000).toLocaleString('ru-RU')}</p>
+                        </div>
+                    `;
+                }
+                
+                logToConsole(`✅ Загрузка всех ${numCount} аттестаций завершена`);
+                
+            } catch (error) {
+                logToConsole(`❌ Ошибка при загрузке аттестаций: ${error.message}`);
+            } finally {
+                getAllButton.disabled = false;
+            }
+        }
+
+        // НАЗНАЧЕНИЕ ОБРАБОТЧИКОВ СОБЫТИЙ
+        document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем наличие MetaMask при загрузке
+            if (checkMetaMask()) {
+                logToConsole("MetaMask обнаружен. Готов к подключению.");
+            }
+            
+            // Назначаем обработчики кнопок
+            connectButton.addEventListener('click', connectAndSetup);
+            createButton.addEventListener('click', createAttestation);
+            countButton.addEventListener('click', getAttestationCount);
+            getAllButton.addEventListener('click', getAllAttestations);
+            
+            // Слушаем изменение сети
+            if (window.ethereum) {
+                window.ethereum.on('chainChanged', handleChainChanged);
+            }
+        });
+    </script>
+</body>
+</html>
