@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CryptoAttestation dApp</title>
-    <!-- ПОДКЛЮЧАЕМ БИБЛИОТЕКУ ETHERS.js через РАЗНЫЕ CDN ДЛЯ НАДЕЖНОСТИ -->
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; line-height: 1.6; }
@@ -16,8 +15,6 @@
         .status-ok { color: #2ecc71; }
         .status-error { color: #e74c3c; }
         .status-wait { color: #f39c12; }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 2s linear infinite; display: inline-block; margin-left: 10px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -27,7 +24,6 @@
     <div class="section">
         <h2>1. Подключение кошелька</h2>
         <button id="connectWallet">🔗 Подключить MetaMask</button>
-        <span id="loader" class="loader" style="display: none;"></span>
         <p>Статус: <span id="walletStatus" class="status-wait">Не подключен</span></p>
         <p>Сеть: <span id="networkStatus">Неизвестно</span></p>
     </div>
@@ -71,7 +67,6 @@
         const countButton = document.getElementById('getAttestationCount');
         const getAllButton = document.getElementById('getAllAttestations');
         const consoleOutput = document.getElementById('console');
-        const loader = document.getElementById('loader');
 
         // ФУНКЦИЯ ЛОГИРОВАНИЯ
         function logToConsole(message) {
@@ -82,11 +77,6 @@
 
         // ФУНКЦИЯ ПРЕОБРАЗОВАНИЯ СТРОКИ В ХЭШ
         function stringToBytes32(inputString) {
-            // ПРОВЕРКА: Загружена ли библиотека ethers?
-            if (typeof ethers === 'undefined') {
-                logToConsole('❌ КРИТИЧЕСКАЯ ОШИБКА: Библиотека ethers не загрузилась!');
-                throw new Error('Ethers library not loaded');
-            }
             return ethers.utils.id(inputString);
         }
 
@@ -109,14 +99,6 @@
             getAllButton.disabled = !isConnected;
         }
 
-        // ОБРАБОТЧИК ИЗМЕНЕНИЯ СЕТИ В METAMASK
-        async function handleChainChanged(chainId) {
-            logToConsole("Обнаружено изменение сети в MetaMask...");
-            currentChainId = chainId;
-            networkSpan.textContent = `ID сети: ${chainId}`;
-            await setupContract();
-        }
-
         // ОСНОВНАЯ ФУНКЦИЯ ПОДКЛЮЧЕНИЯ И НАСТРОЙКИ
         async function connectAndSetup() {
             if (!checkMetaMask()) return;
@@ -124,7 +106,6 @@
             try {
                 logToConsole("Запрос подключения аккаунтов...");
                 connectButton.disabled = true;
-                loader.style.display = 'inline-block';
                 
                 // Запрос доступа к аккаунтам
                 const accounts = await window.ethereum.request({ 
@@ -134,11 +115,6 @@
                 userAddress = accounts[0];
                 statusSpan.textContent = `Подключен: ${userAddress.substring(0, 8)}...`;
                 statusSpan.className = 'status-ok';
-                
-                // ПРОВЕРКА: Загружена ли библиотека ethers?
-                if (typeof ethers === 'undefined') {
-                    throw new Error('Библиотека ethers не загрузилась. Обновите страницу.');
-                }
                 
                 // Настройка провайдера и подписанта
                 provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -150,7 +126,8 @@
                 networkSpan.textContent = `ID сети: ${currentChainId}`;
                 
                 // Настройка контракта
-                await setupContract();
+                contract = new ethers.Contract(contractAddress, contractABI, signer);
+                logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
                 
                 // Включение кнопок взаимодействия
                 updateButtonStates(true);
@@ -162,29 +139,10 @@
                 statusSpan.textContent = "Ошибка подключения";
                 statusSpan.className = 'status-error';
                 connectButton.disabled = false;
-            } finally {
-                loader.style.display = 'none';
             }
         }
 
-        // ФУНКЦИЯ НАСТРОЙКИ КОНТРАКТА
-        async function setupContract() {
-            try {
-                // ПРОВЕРКА: Загружена ли библиотека ethers?
-                if (typeof ethers === 'undefined') {
-                    throw new Error('Библиотека ethers не загрузилась. Обновите страницу.');
-                }
-                
-                contract = new ethers.Contract(contractAddress, contractABI, signer);
-                logToConsole(`Контракт инициализирован по адресу: ${contractAddress}`);
-                return true;
-            } catch (error) {
-                logToConsole(`❌ Ошибка инициализации контракта: ${error.message}`);
-                return false;
-            }
-        }
-
-        // ФУНКЦИЯ СОЗДАНИА АТТЕСТАЦИИ
+        // ФУНКЦИЯ СОЗДАНИЯ АТТЕСТАЦИИ
         async function createAttestation() {
             if (!contract) {
                 logToConsole("⚠️ Контракт не инициализирован");
@@ -206,6 +164,9 @@
                 const assetHash = stringToBytes32(assetInput);
                 const dataHash = stringToBytes32(dataInput);
                 
+                logToConsole(`Asset Hash: ${assetHash}`);
+                logToConsole(`Data Hash: ${dataHash}`);
+                
                 logToConsole("Отправка транзакции...");
                 const transaction = await contract.addAttestation(assetHash, dataHash);
                 
@@ -216,8 +177,15 @@
                 logToConsole(`✅ Транзакция подтверждена в блоке ${receipt.blockNumber}!`);
                 logToConsole("Аттестация успешно записана в блокчейн!");
                 
+                // Очищаем поля после успешного создания
+                document.getElementById('assetInput').value = '';
+                document.getElementById('dataInput').value = '';
+                
             } catch (error) {
                 logToConsole(`❌ Ошибка при создании аттестации: ${error.message}`);
+                if (error.data) {
+                    logToConsole(`Детали ошибки: ${JSON.stringify(error.data)}`);
+                }
             } finally {
                 createButton.disabled = false;
             }
@@ -236,13 +204,17 @@
                 countButton.disabled = true;
                 const assetHash = stringToBytes32(assetInput);
                 
-                logToConsole("Запрос количества аттестаций...");
+                logToConsole(`Запрос количества аттестаций для хэша: ${assetHash}`);
                 const count = await contract.getAttestationCount(assetHash);
                 
                 logToConsole(`✅ Найдено аттестаций: ${count.toString()}`);
                 
             } catch (error) {
                 logToConsole(`❌ Ошибка при запросе количества: ${error.message}`);
+                if (error.error) {
+                    logToConsole(`Детали ошибки: ${JSON.stringify(error.error)}`);
+                }
+                console.error("Полная ошибка:", error);
             } finally {
                 countButton.disabled = false;
             }
@@ -292,6 +264,10 @@
                 
             } catch (error) {
                 logToConsole(`❌ Ошибка при загрузке аттестаций: ${error.message}`);
+                if (error.error) {
+                    logToConsole(`Детали ошибки: ${JSON.stringify(error.error)}`);
+                }
+                console.error("Полная ошибка:", error);
             } finally {
                 getAllButton.disabled = false;
             }
@@ -309,11 +285,6 @@
             createButton.addEventListener('click', createAttestation);
             countButton.addEventListener('click', getAttestationCount);
             getAllButton.addEventListener('click', getAllAttestations);
-            
-            // Слушаем изменение сети
-            if (window.ethereum) {
-                window.ethereum.on('chainChanged', handleChainChanged);
-            }
         });
     </script>
 </body>
