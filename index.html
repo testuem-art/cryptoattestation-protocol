@@ -79,7 +79,81 @@
 				"type": "function"
 			}
 		];
+// Функция для получения списка верификаторов из GitHub Issues
+async function fetchVerifiers() {
+    const repoOwner = 'ТВОЙ_ЛОГИН'; // Замени на свой логин GitHub
+    const repoName = 'cryptoattestation-protocol'; // Замени на название репозитория
+    const issueNumber = 1; // Номер issue, который мы создали
 
+    try {
+        const response = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/issues/${issueNumber}/comments`);
+        const comments = await response.json();
+        
+        // Предполагаем, что список верификаторов в первом комментарии
+        if (comments.length > 0) {
+            const commentText = comments[0].body;
+            // Парсим строки вида "Адрес: 0x... | Имя: ... | Сайт: ..."
+            const verifierLines = commentText.split('\n').filter(line => line.includes('Адрес:'));
+            
+            const verifiers = {};
+            verifierLines.forEach(line => {
+                const addressMatch = line.match(/Адрес:\s*(0x[a-fA-F0-9]{40})/);
+                const nameMatch = line.match(/Имя:\s*([^|]+)/);
+                const websiteMatch = line.match(/Сайт:\s*([^|]+)/);
+                
+                if (addressMatch && nameMatch) {
+                    verifiers[addressMatch[1].toLowerCase()] = {
+                        name: nameMatch[1].trim(),
+                        website: websiteMatch ? websiteMatch[1].trim() : ''
+                    };
+                }
+            });
+            
+            return verifiers;
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке верификаторов:', error);
+    }
+    
+    return {};
+}
+
+// Обновленная функция проверки аттестаций
+async function checkAttestations() {
+    // ... существующий код ...
+    
+    try {
+        const count = await contract.getAttestationCount(assetHash);
+        const verifiersList = await fetchVerifiers(); // Загружаем верификаторов
+        
+        if (count > 0) {
+            let resultText = `✅ У этого токена есть ${count} аттестаций!\n\n`;
+            
+            // Получаем информацию о каждой аттестации
+            for (let i = 0; i < count; i++) {
+                const attestation = await contract.getAttestation(assetHash, i);
+                const verifierAddress = attestation.verifier.toLowerCase();
+                const verifierInfo = verifiersList[verifierAddress] || {name: verifierAddress};
+                
+                resultText += `Аттестация ${i+1}: ${verifierInfo.name}\n`;
+                if (verifierInfo.website) {
+                    resultText += `Сайт: ${verifierInfo.website}\n`;
+                }
+                resultText += `Данные: ${attestation.dataHash}\n`;
+                resultText += `Время: ${new Date(attestation.timestamp * 1000).toLocaleString()}\n\n`;
+            }
+            
+            resultDiv.innerText = resultText;
+            resultDiv.className = 'verified';
+        } else {
+            resultDiv.innerText = '❌ У этого токена нет проверенных аттестаций. Осторожно!';
+            resultDiv.className = 'not-verified';
+        }
+    } catch (error) {
+        resultDiv.innerText = '⚠️ Ошибка: ' + error.message;
+        resultDiv.className = 'not-verified';
+    }
+}
         // Функция для переключения вкладок
         function openTab(evt, tabName) {
             var i, tabcontent, tablinks;
