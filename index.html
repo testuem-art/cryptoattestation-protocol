@@ -28,7 +28,7 @@
 </head>
 <body>
     <h1>🔍 CryptoAttestation Protocol</h1>
-    <p>Децентрализованный реестр доверия для цифровых активов. <a href="https://github.com/ВАШ_ЛОГИН/cryptoattestation-protocol/blob/main/INSTRUCTIONS.md" target="_blank">Инструкция для верификаторов</a></p>
+    <p>Децентрализованный реестр доверия для цифровых активов. <a href="https://github.com/testuem-art/cryptoattestation-protocol/blob/main/INSTRUCTIONS.md" target="_blank">Инструкция для верификаторов</a></p>
 
     <div class="tab">
         <button class="tablinks active" onclick="openTab(event, 'CheckTab')">Проверить токен</button>
@@ -85,10 +85,10 @@
             customInput.style.display = selection.value === 'CUSTOM' ? 'block' : 'none';
         }
 
-        // Функция для получения списка верификаторов из GitHub Issues:cite[1]:cite[10]
+        // Функция для получения списка верификаторов из GitHub Issues
         async function fetchVerifiers() {
-            const repoOwner = 'ВАШ_ЛОГИН'; // Замените на ваш логин GitHub
-            const repoName = 'cryptoattestation-protocol'; // Замените на название репозитория
+            const repoOwner = 'testuem-art'; // Ваш логин GitHub
+            const repoName = 'cryptoattestation-protocol'; // Название репозитория
             const issueNumber = 1; // Номер issue с списком верификаторов
 
             try {
