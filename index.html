@@ -51,7 +51,34 @@
     <script>
         // КОНФИГУРАЦИЯ - ЗАМЕНИ НА СВОИ ДАННЫЕ!
         const contractAddress = "0xac9cd46cd8be86413eb0d022ee9b4eed680a21ec1b572c7ec18b112f563215aa"; // Адрес нового контракта
-        const abi = [ /* ВСТАВЬ СЮДА ABI НОВОГО КОНТРАКТА */ ];
+        const abi = [ 
+			{
+				"inputs": [],
+				"name": "retrieve",
+				"outputs": [
+					{
+						"internalType": "uint256",
+						"name": "",
+						"type": "uint256"
+					}
+				],
+				"stateMutability": "view",
+				"type": "function"
+			},
+			{
+				"inputs": [
+					{
+						"internalType": "uint256",
+						"name": "num",
+						"type": "uint256"
+					}
+				],
+				"name": "store",
+				"outputs": [],
+				"stateMutability": "nonpayable",
+				"type": "function"
+			}
+		];
 
         // Функция для переключения вкладок
         function openTab(evt, tabName) {
