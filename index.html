@@ -38,7 +38,7 @@
     </div>
 
     <!-- Вкладка 2: Добавление -->
-    <div id="AddTab" class="tabcontent">
+   <div id="AddTab" class="tabcontent">
     <h3>Добавить аттестацию (только для верификаторов)</h3>
     <input type="text" id="assetAddressInput" placeholder="Адрес токена (например, 0x1234...)">
     <br>
@@ -57,6 +57,50 @@
 </div>
 
 <script>
+// Показываем/скрываем поле для кастомного типа
+document.getElementById('verificationTypeInput').addEventListener('change', function() {
+    const customInput = document.getElementById('customVerificationInput');
+    customInput.style.display = this.value === 'CUSTOM' ? 'block' : 'none';
+});
+
+// Обновленная функция добавления аттестации
+async function addAttestation() {
+    const addResultDiv = document.getElementById('addResult');
+    addResultDiv.style.display = 'block';
+    addResultDiv.className = '';
+    addResultDiv.innerText = 'Отправляем транзакцию...';
+
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const signer = provider.getSigner();
+    const contract = new ethers.Contract(contractAddress, abi, signer);
+
+    // Генерируем хеши из читаемых строк
+    const assetAddress = document.getElementById('assetAddressInput').value;
+    const chainId = document.getElementById('assetChainInput').value;
+    const assetHash = ethers.utils.id(`${chainId}:${assetAddress}`.toLowerCase());
+
+    let verificationType = document.getElementById('verificationTypeInput').value;
+    if (verificationType === 'CUSTOM') {
+        verificationType = document.getElementById('customVerificationInput').value;
+    }
+    const dataHash = ethers.utils.id(verificationType);
+
+    try {
+        const tx = await contract.addAttestation(assetHash, dataHash);
+        addResultDiv.innerText = `✅ Транзакция отправлена! Хеш: ${tx.hash}. Ожидаем подтверждения...`;
+        addResultDiv.className = 'info';
+
+        await tx.wait();
+        addResultDiv.innerText = `✅ Аттестация успешно добавлена в блокчейн!`;
+        addResultDiv.className = 'verified';
+
+    } catch (error) {
+        addResultDiv.innerText = '❌ Ошибка: ' + error.message;
+        addResultDiv.className = 'not-verified';
+    }
+}
+</script>
 // Показываем/скрываем поле для кастомного типа
 document.getElementById('verificationTypeInput').addEventListener('change', function() {
     const customInput = document.getElementById('customVerificationInput');
