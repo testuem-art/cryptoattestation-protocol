@@ -39,16 +39,68 @@
 
     <!-- Вкладка 2: Добавление -->
     <div id="AddTab" class="tabcontent">
-        <h3>Добавить аттестацию (только для верификаторов)</h3>
-        <input type="text" id="assetHashInput" placeholder="Хеш актива (bytes32)">
-        <br>
-        <input type="text" id="dataHashInput" placeholder="Хеш данных аттестации (например, AUDIT:PASSED)">
-        <br>
-        <button onclick="addAttestation()">Добавить аттестацию</button>
-        <div id="addResult"></div>
-    </div>
+    <h3>Добавить аттестацию (только для верификаторов)</h3>
+    <input type="text" id="assetAddressInput" placeholder="Адрес токена (например, 0x1234...)">
+    <br>
+    <input type="text" id="assetChainInput" placeholder="ID блокчейна (например, 1 для Ethereum)">
+    <br>
+    <select id="verificationTypeInput">
+        <option value="AUDIT:PASSED">Аудит пройден</option>
+        <option value="KYC:VERIFIED">KYC пройден</option>
+        <option value="SAFE:CONFIRMED">Безопасность подтверждена</option>
+        <option value="CUSTOM">Другое...</option>
+    </select>
+    <input type="text" id="customVerificationInput" placeholder="Введите свой тип проверки" style="display:none;">
+    <br>
+    <button onclick="addAttestation()">Добавить аттестацию</button>
+    <div id="addResult"></div>
+</div>
 
-    <script>
+<script>
+// Показываем/скрываем поле для кастомного типа
+document.getElementById('verificationTypeInput').addEventListener('change', function() {
+    const customInput = document.getElementById('customVerificationInput');
+    customInput.style.display = this.value === 'CUSTOM' ? 'block' : 'none';
+});
+
+// Обновленная функция добавления аттестации
+async function addAttestation() {
+    const addResultDiv = document.getElementById('addResult');
+    addResultDiv.style.display = 'block';
+    addResultDiv.className = '';
+    addResultDiv.innerText = 'Отправляем транзакцию...';
+
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const signer = provider.getSigner();
+    const contract = new ethers.Contract(contractAddress, abi, signer);
+
+    // Генерируем хеши из читаемых строк
+    const assetAddress = document.getElementById('assetAddressInput').value;
+    const chainId = document.getElementById('assetChainInput').value;
+    const assetHash = ethers.utils.id(`${chainId}:${assetAddress}`.toLowerCase());
+
+    let verificationType = document.getElementById('verificationTypeInput').value;
+    if (verificationType === 'CUSTOM') {
+        verificationType = document.getElementById('customVerificationInput').value;
+    }
+    const dataHash = ethers.utils.id(verificationType);
+
+    try {
+        const tx = await contract.addAttestation(assetHash, dataHash);
+        addResultDiv.innerText = `✅ Транзакция отправлена! Хеш: ${tx.hash}. Ожидаем подтверждения...`;
+        addResultDiv.className = 'info';
+
+        await tx.wait();
+        addResultDiv.innerText = `✅ Аттестация успешно добавлена в блокчейн!`;
+        addResultDiv.className = 'verified';
+
+    } catch (error) {
+        addResultDiv.innerText = '❌ Ошибка: ' + error.message;
+        addResultDiv.className = 'not-verified';
+    }
+}
+</script>
         // КОНФИГУРАЦИЯ - ЗАМЕНИ НА СВОИ ДАННЫЕ!
         const contractAddress = "0xac9cd46cd8be86413eb0d022ee9b4eed680a21ec1b572c7ec18b112f563215aa"; // Адрес нового контракта
         const abi = [ 
